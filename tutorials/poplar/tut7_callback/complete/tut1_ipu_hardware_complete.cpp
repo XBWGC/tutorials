@@ -5,6 +5,8 @@
    See the Poplar user guide for details.
 */
 
+// reference: https://phabricator.sourcevertex.net/T47896
+
 #include <poplar/DeviceManager.hpp>
 #include <poplar/Engine.hpp>
 #include <poplar/Graph.hpp>
@@ -66,6 +68,7 @@ int main() {
   prog.add(program::Copy(v1_stream, v1));
   prog.add(program::Copy(v1, v2));
   prog.add(program::Copy(v2, v2_stream));
+  prog.add(program::Sync(poplar::SyncType::EXTERNAL));
   prog.add(program::Copy(v3_stream, v3));
   prog.add(program::Copy(v3, v4));
   prog.add(program::Copy(v4, v4_stream));
@@ -84,34 +87,31 @@ int main() {
     h1[i] = float(i);
   }
 
-  bool flag = false;
-
   auto d2h_callback = [&](void *ptr) {
     std::cout << "d2h_callback" << std::endl;
     float *data = reinterpret_cast<float *>(ptr);
     for (int i = 0; i < SIZE; i++) {
-      h3[i] = data[i] + 5.0f;
+      h2[i] = data[i] + 5.0f;
+      h3[i] = h2[i];
     }
-    flag = true;
   };
 
   auto h2d_callback = [&](void *ptr) {
     std::cout << "h2d_callback" << std::endl;
-    while (!flag) {
-      ;
-    }
     float *data = reinterpret_cast<float *>(ptr);
     for (int i = 0; i < SIZE; i++) {
       data[i] = h3[i];
     }
   };
 
-  // Connect the data stream
+  // Connect v1_stream to h1
   engine.connectStream("v1-in", &h1[0], &h1[SIZE]);
 
+  // Connect v2_stream to d2h_callback
   engine.connectStreamToCallback("v2-out", d2h_callback);
-  engine.connectStreamToCallback("v3-in", h2d_callback);
-  // engine.connectStream("v3-in", &h3[0], &h3[SIZE]);
+
+  // engine.connectStreamToCallback("v3-in", h2d_callback);
+  engine.connectStream("v3-in", &h3[0], &h3[SIZE]);
 
   engine.connectStream("v4-out",&h4[0], &h4[SIZE]);
 
@@ -120,10 +120,17 @@ int main() {
   engine.run(0);
   std::cout << "Program complete\n";
 
-  // Output the copied back values of v3
-  std::cout << "\nh4 data:\n";
+  // Output the IPU result
+  std::cout << "h4 data:\n";
   for (unsigned i = 0; i < SIZE; ++i) {
     std::cout << h4[i] << " ";
+  }
+  std::cout << std::endl;
+
+  // Output the expected result
+  std::cout << "expected:\n";
+  for (unsigned i = 0; i < SIZE; ++i) {
+    std::cout << h1[i] + 5.0f << " ";
   }
   std::cout << std::endl;
 
