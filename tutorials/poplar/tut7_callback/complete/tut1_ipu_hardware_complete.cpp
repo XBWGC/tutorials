@@ -68,6 +68,7 @@ int main() {
   prog.add(program::Copy(v1_stream, v1));
   prog.add(program::Copy(v1, v2));
   prog.add(program::Copy(v2, v2_stream));
+  // without this sync, the output is wrong
   prog.add(program::Sync(poplar::SyncType::EXTERNAL));
   prog.add(program::Copy(v3_stream, v3));
   prog.add(program::Copy(v3, v4));
